@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>HUD</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@200;300&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  body { transform: scaleX(-1); }
+
+  #app {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .speedo-wrap {
+    position: relative;
+    width: min(88vw, 88vh);
+    height: min(88vw, 88vh);
+    max-width: 440px;
+    max-height: 440px;
+  }
+
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    filter: drop-shadow(0 0 12px rgba(0,230,255,0.3));
+  }
+
+  .speed-display {
+    position: absolute;
+    bottom: 26%;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    line-height: 1;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .speed-num {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 200;
+    font-size: clamp(52px, 15vw, 88px);
+    letter-spacing: -3px;
+    color: #00e6ff;
+    text-shadow: 0 0 28px rgba(0,230,255,0.55);
+    transition: color 0.4s, text-shadow 0.4s;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .speed-num.warn   { color: #ffaa00; text-shadow: 0 0 28px rgba(255,170,0,0.55); }
+  .speed-num.danger { color: #ff3355; text-shadow: 0 0 28px rgba(255,51,85,0.55); }
+
+  .unit {
+    display: block;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    font-size: clamp(10px, 2.5vw, 13px);
+    letter-spacing: 5px;
+    color: rgba(0,230,255,0.35);
+    margin-top: 8px;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="speedo-wrap">
+    <canvas id="gauge"></canvas>
+    <div class="speed-display">
+      <div class="speed-num" id="speed-num">0</div>
+      <span class="unit">km/h</span>
+    </div>
+  </div>
+</div>
+<script>
+const MAX_SPEED = 240;
+const canvas = document.getElementById('gauge');
+const ctx = canvas.getContext('2d');
+const speedEl = document.getElementById('speed-num');
+
+let currentSpeed = 0;
+let displaySpeed = 0;
+
+const START = Math.PI * 0.75;
+const END   = Math.PI * 2.25;
+const SWEEP = END - START;
+
+function resize() {
+  const s = canvas.offsetWidth * window.devicePixelRatio;
+  canvas.width = s;
+  canvas.height = s;
+}
+
+function draw(speed) {
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2;
+  const R = W * 0.42;
+  const f = Math.min(speed / MAX_SPEED, 1);
+
+  ctx.clearRect(0, 0, W, H);
+
+  const col  = f > 0.85 ? '#ff3355' : f > 0.6 ? '#ffaa00' : '#00e6ff';
+
+  // Background track
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, START, END);
+  ctx.strokeStyle = 'rgba(0,230,255,0.06)';
+  ctx.lineWidth = W * 0.048;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Filled arc
+  if (f > 0) {
+    const fe = START + SWEEP * f;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, START, fe);
+    ctx.strokeStyle = col;
+    ctx.lineWidth = W * 0.048;
+    ctx.lineCap = 'round';
+    ctx.shadowColor = col;
+    ctx.shadowBlur = W * 0.055;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Bright sheen
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, START, fe);
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = W * 0.007;
+    ctx.stroke();
+  }
+
+  // Ticks
+  const TICKS = 24;
+  for (let i = 0; i <= TICKS; i++) {
+    const ang = START + (SWEEP / TICKS) * i;
+    const major = i % 4 === 0;
+    const len = major ? W * 0.05 : W * 0.024;
+    const r1 = R - W * 0.057;
+    const r2 = r1 - len;
+    const lit = f > 0 && f >= i / TICKS - 0.001;
+
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(ang) * r1, cy + Math.sin(ang) * r1);
+    ctx.lineTo(cx + Math.cos(ang) * r2, cy + Math.sin(ang) * r2);
+    ctx.strokeStyle = lit ? col : 'rgba(0,230,255,0.14)';
+    ctx.lineWidth = major ? W * 0.007 : W * 0.003;
+    ctx.lineCap = 'round';
+    if (lit) { ctx.shadowColor = col; ctx.shadowBlur = W * 0.01; }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function loop() {
+  displaySpeed += (currentSpeed - displaySpeed) * 0.10;
+  if (Math.abs(currentSpeed - displaySpeed) < 0.05) displaySpeed = currentSpeed;
+  draw(displaySpeed);
+  const r = Math.round(displaySpeed);
+  speedEl.textContent = r;
+  speedEl.className = 'speed-num' + (displaySpeed > 200 ? ' danger' : displaySpeed > 120 ? ' warn' : '');
+  requestAnimationFrame(loop);
+}
+
+navigator.geolocation && navigator.geolocation.watchPosition(
+  p => { const s = p.coords.speed; currentSpeed = s != null && s >= 0 ? s * 3.6 : 0; },
+  () => {},
+  { enableHighAccuracy: true, maximumAge: 500, timeout: 15000 }
+);
+
+window.addEventListener('resize', resize);
+resize();
+loop();
+
+'wakeLock' in navigator && navigator.wakeLock.request('screen').catch(() => {});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && 'wakeLock' in navigator)
+    navigator.wakeLock.request('screen').catch(() => {});
+});
+</script>
+</body>
+</html>
